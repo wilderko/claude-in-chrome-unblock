@@ -1,0 +1,4 @@
+extension/_metadata/
+__pycache__/
+*.pyc
+Preferences.unblock.bak
