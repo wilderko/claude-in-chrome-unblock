@@ -6,7 +6,9 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if pgrep -f "chrome" >/dev/null 2>&1; then
+running() { pgrep -f "chrome($|[^/]*$)" >/dev/null 2>&1 || pgrep -f "chrome --" >/dev/null 2>&1; }
+
+if running; then
   echo "Chrome beží. Zatvor ho (aj na pozadí) a spusti znova."
   echo "  flatpak:  flatpak kill com.google.Chrome"
   echo "  inak:     pkill -f chrome"

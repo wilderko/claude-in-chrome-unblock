@@ -4,7 +4,9 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if pgrep -f "chrome" >/dev/null 2>&1; then
+running() { pgrep -f "chrome($|[^/]*$)" >/dev/null 2>&1 || pgrep -f "chrome --" >/dev/null 2>&1; }
+
+if running; then
   echo "Chrome beží. Zatvor ho a spusti znova."
   exit 1
 fi
