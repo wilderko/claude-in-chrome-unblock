@@ -97,8 +97,9 @@ alebo `getCategory sa nenašla`. Vtedy treba pozrieť daný súbor a doladiť
 ```
 
 Vráti `Preferences` na store verziu a kópiu z `ClaudeExtUnblocked` zmaže.
-Pred každou zmenou `Preferences` si skript nechá zálohu
-`Preferences.unblock.bak`.
+Chrome si po spustení čistú verziu z obchodu sťahuje sám — po prvom štarte
+môže pár sekúnd trvať, kým sa rozšírenie objaví. Záloha `Preferences` zostáva
+ako `Preferences.unblock.bak`.
 
 ## Obmedzenia
 

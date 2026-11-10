@@ -157,11 +157,22 @@ def install(profile):
 
 
 def revert(profile):
-    cur = json.load(open(prefs_path(profile)))["extensions"]["settings"].get(EXT_ID, {})
+    """Vráti store kópiu. Cesta musí byť relatívna, inak Chrome kópiu nenájde
+    ani po reinštalácii."""
     store = glob.glob(os.path.join(profile, "Default", "Extensions", EXT_ID, "*"))
-    path = cur.get("path", "")
     if store:
         path = os.path.join(EXT_ID, os.path.basename(max(store, key=os.path.getmtime)))
+    else:
+        # Kópia zmizla (Chrome ju pri prepnutí na unpacked zmaže). Cestu
+        # odvodíme z manifestu a Chrome si ju pri štarte stiahne znova.
+        ver = None
+        try:
+            ver = json.load(open(os.path.join(target(profile), "manifest.json")))["version"]
+        except Exception:
+            ver = json.load(
+                open(os.path.join(HERE, "extension", "manifest.json"))
+            )["version"]
+        path = os.path.join(EXT_ID, f"{ver}_0")
     set_entry(profile, 1, path, True)
     shutil.rmtree(target(profile), ignore_errors=True)
     print(f"{profile}\n  - vrátené na verziu z obchodu")
