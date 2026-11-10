@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""Vypne v rozšírení "Claude in Chrome" blokovanie stránok podľa safety kategórií.
+"""Disables the site blocklist in the "Claude in Chrome" extension.
 
-Rozšírenie si pre každú URL pýta kategóriu z
-api.anthropic.com/api/web/url_hash_check/browser_extension a pri kategórii
-category1 (blokované, napr. tinder.com) presmeruje tab na blocked.html.
+For every URL the extension fetches a category from
+api.anthropic.com/api/web/url_hash_check/browser_extension and redirects the
+tab to blocked.html on category1 (blocked, e.g. tinder.com).
 
-Tento skript patchne getCategory() tak, že vráti "category0" (bezpečné) pre
-všetko, čo nie je category3/category4 (tie nechávame — za nimi je len
-permission prompt / copyright notice).
+This script patches getCategory() to return "category0" (safe) for everything
+except category3/category4, which are left alone (they only add a permission
+prompt / copyright notice).
 
-Prečo unpacked a nie prepis súborov na mieste: Chrome pri štarte overuje
-_metadata hashe a upravenú store kópiu označí za corrupted a znova stiahne.
-Preto sa rozšírenie nainštaluje ako unpacked kópia (location 4), kde sa
-hashe neoverujú. ID zostáva rovnaké (manifest má "key"), takže prihlásenie
-na claude.ai funguje ďalej.
+Why an unpacked copy instead of editing files in place: Chrome verifies the
+_metadata hashes on startup, marks the edited store copy as corrupted and
+reinstalls it. The script therefore installs an unpacked copy (location 4),
+where hashes are not checked. The ID stays the same (the manifest carries a
+"key"), so the claude.ai login keeps working.
 
-Použitie:
-    ./install.sh              # jednoduché spustenie
-    python3 patch.py          # to isté priamo
-    python3 patch.py --revert # späť na verziu z obchodu
+Usage:
+    ./install.sh              # normal entry point
+    python3 patch.py          # same thing directly
+    python3 patch.py --revert # switch back to the store version
 
-Skript musí bežať pri zatvorenom Chrome (upravuje Preferences).
+The script must run with Chrome closed (it edits Preferences).
 
-Po každej aktualizácii rozšírenia z obchodu treba spustiť znova.
+Re-run after every store update of the extension.
 """
 import glob
 import json
@@ -42,7 +42,7 @@ PROFILES = [
 ]
 DIR_NAME = "ClaudeExtUnblocked"
 
-# Obalí getCategory() tak, aby blokujúce kategórie zmenil na category0.
+# Wraps getCategory() so blocking categories become category0.
 HELPER = (
     'static DISABLE_BLOCKLIST=!0;'
     'static unblockCategory(e){return null==e||"category0"===e||"category3"===e'
@@ -66,7 +66,7 @@ def target(profile):
 
 
 def source_copy(profile):
-    """Zdroj: najnovšia kópia z obchodu, inak priložený snapshot."""
+    """Source: newest store copy, otherwise the bundled snapshot."""
     store = glob.glob(os.path.join(profile, "Default", "Extensions", EXT_ID, "*"))
     cand = [d for d in store if os.path.isfile(os.path.join(d, "manifest.json"))]
     if cand:
@@ -82,7 +82,7 @@ def patch_js(path):
 
     m = re.search(r"([A-Za-z_$][\w$]*)=class\{static cache=new Map;", src)
     if not m:
-        print(f"  ! nepoznám štruktúru v {os.path.basename(path)} (nový build?)")
+        print(f"  ! unknown structure in {os.path.basename(path)} (new build?)")
         return False
     cls = m.group(1)
 
@@ -91,7 +91,7 @@ def patch_js(path):
 
     old = "static async getCategory(e){if(e=this.normalizeUrl(e),"
     if src.count(old) != 1:
-        print(f"  ! getCategory sa nenašla v {os.path.basename(path)}")
+        print(f"  ! getCategory not found in {os.path.basename(path)}")
         return False
     new = (
         f"static async getCategory(e){{if(!{cls}.DISABLE_BLOCKLIST)return {cls}.getRawCategory(e);"
@@ -107,7 +107,7 @@ def patch_js(path):
         os.replace(tmp, path)
     else:
         os.unlink(tmp)
-        print(f"  ! syntax error v {os.path.basename(path)}")
+        print(f"  ! syntax error in {os.path.basename(path)}")
     return ok
 
 
@@ -135,7 +135,7 @@ def set_entry(profile, location, path, from_store):
 def install(profile):
     src = source_copy(profile)
     if not src:
-        print(f"{profile}\n  - rozšírenie nie je nainštalované a chýba snapshot")
+        print(f"{profile}\n  - extension not installed and no snapshot available")
         return 1
 
     dst = target(profile)
@@ -146,25 +146,25 @@ def install(profile):
 
     targets = glob.glob(os.path.join(dst, "assets", "mcpPermissions-*.js"))
     if not targets:
-        print(f"{profile}\n  ! v rozšírení chýba mcpPermissions-*.js")
+        print(f"{profile}\n  ! mcpPermissions-*.js missing from the extension")
         return 1
     if not all(patch_js(t) for t in targets):
         return 1
 
     set_entry(profile, 4, dst, False)
-    print(f"{profile}\n  - nainštalované: {dst}")
+    print(f"{profile}\n  - installed: {dst}")
     return 0
 
 
 def revert(profile):
-    """Vráti store kópiu. Cesta musí byť relatívna, inak Chrome kópiu nenájde
-    ani po reinštalácii."""
+    """Reinstates the store copy. The path must be relative, otherwise Chrome
+    will not find the copy even after reinstalling it."""
     store = glob.glob(os.path.join(profile, "Default", "Extensions", EXT_ID, "*"))
     if store:
         path = os.path.join(EXT_ID, os.path.basename(max(store, key=os.path.getmtime)))
     else:
-        # Kópia zmizla (Chrome ju pri prepnutí na unpacked zmaže). Cestu
-        # odvodíme z manifestu a Chrome si ju pri štarte stiahne znova.
+        # The copy is gone (Chrome deletes it when switching to unpacked).
+        # Derive the path from the manifest; Chrome re-downloads it on start.
         ver = None
         try:
             ver = json.load(open(os.path.join(target(profile), "manifest.json")))["version"]
@@ -175,7 +175,7 @@ def revert(profile):
         path = os.path.join(EXT_ID, f"{ver}_0")
     set_entry(profile, 1, path, True)
     shutil.rmtree(target(profile), ignore_errors=True)
-    print(f"{profile}\n  - vrátené na verziu z obchodu")
+    print(f"{profile}\n  - reverted to the store version")
     return 0
 
 
@@ -183,12 +183,12 @@ def main():
     undo = "--revert" in sys.argv
     found = list(profiles())
     if not found:
-        print("Nenašiel som profil Chrome.")
+        print("No Chrome profile found.")
         return 1
     rc = 0
     for profile in found:
         rc |= revert(profile) if undo else install(profile)
-    print("\nHotovo. Spusti Chrome.")
+    print("\nDone. Start Chrome.")
     return rc
 
 

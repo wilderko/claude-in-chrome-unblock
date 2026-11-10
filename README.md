@@ -1,30 +1,31 @@
 # claude-in-chrome-unblock
 
-Vypne v rozšírení **Claude in Chrome** blokovanie stránok podľa safety
-kategórií. Napríklad `tinder.com` sa potom normálne načíta namiesto hlášky
-*„The content on this page isn't available when Claude is active for safety
-reasons."*
+**English** · [Slovensky](README.sk.md)
 
-## Čo to vlastne robí
+Disables the site blocklist in the **Claude in Chrome** extension. Sites such
+as `tinder.com` then load normally instead of showing *"The content on this
+page isn't available when Claude is active for safety reasons."*
 
-Rozšírenie pre každú URL volá
-`POST https://api.anthropic.com/api/web/url_hash_check/browser_extension` a
-podľa vrátenej kategórie sa rozhoduje:
+## What it actually does
 
-| kategória | správanie |
+For every URL the extension calls
+`POST https://api.anthropic.com/api/web/url_hash_check/browser_extension` and
+decides based on the returned category:
+
+| category | behaviour |
 |---|---|
-| `category0` | bezpečné, nič sa nedeje |
-| `category1` | **blokované** – tab sa presmeruje na `blocked.html` |
-| `category2` | blokované rovnako ako 1 |
-| `category3` | povoľovací prompt pred prístupom |
-| `category4` | copyright notice („mám právo na obsah") |
-| `category_org_blocked`, `category_unknown_error` | blokované |
+| `category0` | safe, nothing happens |
+| `category1` | **blocked** – tab is redirected to `blocked.html` |
+| `category2` | blocked, same as 1 |
+| `category3` | permission prompt before access |
+| `category4` | copyright notice ("I have the right to this content") |
+| `category_org_blocked`, `category_unknown_error` | blocked |
 
-Patch obalí `getCategory()` a vráti `category0` pre všetko okrem
-`category3`/`category4`, ktoré necháva tak — tam za blokovanie nejde, len o
-prompt a notice.
+The patch wraps `getCategory()` and returns `category0` for everything except
+`category3`/`category4`, which it leaves alone — those are not blocks, just a
+prompt and a notice.
 
-Zdroj blokovania je čisto klientský JS, takže sa to dá vypnúť bez servera:
+The blocklist is pure client-side JS, so it can be disabled without a server:
 
 ```js
 static async getCategory(e){
@@ -34,14 +35,16 @@ static async getCategory(e){
 }
 ```
 
-Kategórie sa aj tak načítavajú (kvôli `category3`/`category4` správaniu), len
-sa premenujú na `category0`.
+Categories are still fetched (to keep the `category3`/`category4` behaviour),
+they are only renamed to `category0`.
 
-## Inštalácia
+## Installation
 
-Predpoklady: Linux s Chrome/Chromium a nainštalovaným rozšírením
-[Claude in Chrome](https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn),
-Python 3, Node (kvôli `node --check`).
+Requirements: Linux or macOS with Chrome/Chromium and the
+[Claude in Chrome](https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn)
+extension installed, Python 3, Node (for `node --check`).
+
+Close Chrome first, then:
 
 ```bash
 git clone https://github.com/wilderko/claude-in-chrome-unblock.git
@@ -49,76 +52,75 @@ cd claude-in-chrome-unblock
 ./install.sh
 ```
 
-Potom spusti Chrome. Rozšírenie sa načíta z odblokovanej kópie.
+Start Chrome afterwards. The extension loads from the unblocked copy.
 
-### Prečo unpacked a nie prepis súborov
+### Why an unpacked copy instead of editing files in place
 
-Priama úprava súborov v priečinku z obchodu vyzerá, že funguje — do prvého
-reštartu. Chrome pri štarte overí `_metadata` hashe, kópiu označí za
-`Corrupted extension ... reinstalled` a stiahne si čistú verziu.
+Editing the files in the store directory appears to work — until the first
+restart. On startup Chrome verifies the `_metadata` hashes, marks the copy as
+`Corrupted extension ... reinstalled` and downloads a clean version.
 
-Skript preto rozšírenie skopíruje mimo `Extensions/` a v `Preferences` ho
-prepne na `location: 4` (unpacked), kde sa hashe neoverujú. Manifest si
-necháva pôvodný `key`, takže ID rozšírenia aj prihlásenie na claude.ai
-zostávajú rovnaké a nič sa nepretrhne.
+So the script copies the extension outside `Extensions/` and flips the
+`Preferences` entry to `location: 4` (unpacked), where hashes are not checked.
+The manifest keeps its original `key`, so the extension ID and the claude.ai
+login stay intact and nothing breaks.
 
-## Použitie
+## Usage
 
-Po inštalácii netreba nič — rozšírenie sa správa normálne, len neblokuje.
-Side panel, klikacie nástroje aj čítanie stránok fungujú ďalej.
+Nothing to do after installing — the extension behaves normally, it just does
+not block. The side panel, click tools and page reading keep working.
 
-Overenie, že to sedí:
+To verify it took effect, open `chrome://extensions` and check that Claude runs
+from the `ClaudeExtUnblocked` directory rather than from the store.
 
-```bash
-# v adresnom riadku otvor chrome://extensions a skontroluj, že Claude je
-# z priečinka ClaudeExtUnblocked a nie z obchodu
-```
+## Extension updates
 
-## Aktualizácie rozšírenia
-
-Toto sa neaktualizuje samo. Keď v obchode vyjde nová verzia, treba:
+This does not update by itself. When a new version ships in the store, run:
 
 ```bash
-./install.sh          # pri zatvorenom Chrome
+./install.sh          # with Chrome closed
 ```
 
-Skript si novú verziu z obchodu zoberie automaticky. Ak v obchode nič nie je,
-použije priložený snapshot `extension/`.
+The script picks the new store version automatically. If the store has nothing,
+it falls back to the bundled `extension/` snapshot.
 
-Keďže patch stojí na minifikovaných názvoch (`mcpPermissions-*.js`), pri
-výraznej zmene buildu sa môže stať, že skript napíše `nepoznám štruktúru`
-alebo `getCategory sa nenašla`. Vtedy treba pozrieť daný súbor a doladiť
-`patch_js()` — logika je vždy rovnaká, mení sa len obal.
+Because the patch relies on minified names (`mcpPermissions-*.js`), a large
+build change can make the script print `don't recognise the structure` or
+`getCategory not found`. In that case look at the file and adjust `patch_js()` —
+the logic is always the same, only the wrapper changes.
 
-## Odinštalovanie
+## Uninstalling
 
 ```bash
-./uninstall.sh        # pri zatvorenom Chrome
+./uninstall.sh        # with Chrome closed
 ```
 
-Vráti `Preferences` na store verziu a kópiu z `ClaudeExtUnblocked` zmaže.
-Chrome si po spustení čistú verziu z obchodu sťahuje sám — po prvom štarte
-môže pár sekúnd trvať, kým sa rozšírenie objaví. Záloha `Preferences` zostáva
-ako `Preferences.unblock.bak`.
+Switches `Preferences` back to the store version and deletes the
+`ClaudeExtUnblocked` copy. Chrome downloads a clean version on its own after
+startup — it may take a few seconds on first launch before the extension
+reappears. The `Preferences` backup is kept as `Preferences.unblock.bak`.
 
-## Obmedzenia
+## Limitations
 
-- **`category_org_blocked`** — blokácia z politiky firemného účtu ide cez
-  `isUrlBlockedByManagedPolicy()` a ostáva. (Dá sa doplniť rovnakým spôsobom.)
-- **Developer mode** — unpacked inštalácia ho má zapnutý, Chrome pri štarte
-  zobrazí bublinu „Turn off developer mode". Dá sa ignorovať.
-- **Distribúcia kódu Anthropicu** — v repo je ich minifikovaný build,
-  `extension/` je len kópia pre prípad, že z obchodu nič nepríde.
-- Overené na Claude in Chrome **1.0.106**, Linux, flatpak aj natívny profil.
+- **`category_org_blocked`** — blocks from an organisation's account policy go
+  through `isUrlBlockedByManagedPolicy()` and remain. (Can be patched the same
+  way.)
+- **Developer mode** — unpacked installs require it; Chrome shows a "Turn off
+  developer mode" bubble on startup. Safe to ignore.
+- **Anthropic's code** — the repo carries their minified build; `extension/` is
+  only a fallback for when the store delivers nothing.
+- Tested on Claude in Chrome **1.0.106**, Linux, both flatpak and native
+  profiles.
 
-## Súbory
+## Files
 
-| súbor | čo to je |
+| file | what it is |
 |---|---|
-| `install.sh` / `uninstall.sh` | obal, ktorý zastaví, ak beží Chrome |
-| `patch.py` | hľadanie profilov, patch, prepnutie `Preferences`, `--revert` |
-| `extension/` | snapshot rozšírenia 1.0.106 s aplikovaným patchom |
+| `install.sh` / `uninstall.sh` | wrappers that stop early if Chrome is running |
+| `patch.py` | profile discovery, patching, `Preferences` switch, `--revert` |
+| `extension/` | snapshot of 1.0.106 with the patch applied |
 
-## Licencia
+## Licence
 
-Kód Anthropicu v `extension/` patrí Anthropicu. Skripty v tomto repe sú MIT.
+The Anthropic code in `extension/` belongs to Anthropic. The scripts in this
+repo are MIT.
