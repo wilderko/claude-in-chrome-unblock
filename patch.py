@@ -75,6 +75,41 @@ def source_copy(profile):
     return snap if os.path.isfile(os.path.join(snap, "manifest.json")) else None
 
 
+def patch_agent_marker(path):
+    """Hide Claude from agent detection.
+
+    Tinder recognises Claude in Chrome by a marker element the extension adds
+    to every page: a div of body with no attributes, no children, a closed
+    shadow root and display:contents. Dropping one attribute is enough to stop
+    the match, so append an attribute *after* the code that strips attributes
+    (it runs on every update of the host, which is why it must be after).
+    """
+    src = open(path, encoding="utf-8").read()
+    if 'data-unblock' in src:
+        return True
+
+    # Older builds use `n` instead of `t` here, so match the shape, not the name.
+    m = re.search(
+        r"for\(const (\w+) of e\.getAttributeNames\(\)\)e\.removeAttribute\(\1\);",
+        src,
+    )
+    if not m:
+        print(f"  ! agent marker anchor not found in {os.path.basename(path)}")
+        return False
+
+    patched = src[: m.end()] + 'e.setAttribute("data-unblock","1");' + src[m.end():]
+
+    tmp = path[: -len(".js")] + ".__tmp.js"
+    open(tmp, "w", encoding="utf-8").write(patched)
+    ok = subprocess.run(["node", "--check", tmp], capture_output=True).returncode == 0
+    if ok:
+        os.replace(tmp, path)
+    else:
+        os.unlink(tmp)
+        print(f"  ! syntax error in {os.path.basename(path)}")
+    return ok
+
+
 def patch_js(path):
     src = open(path, encoding="utf-8").read()
     if "DISABLE_BLOCKLIST" in src:
@@ -150,6 +185,12 @@ def install(profile):
         return 1
     if not all(patch_js(t) for t in targets):
         return 1
+
+    markers = glob.glob(os.path.join(dst, "assets", "agent-visual-indicator.js-*.js"))
+    if markers and not all(patch_agent_marker(t) for t in markers):
+        return 1
+    if not markers:
+        print(f"{profile}\n  - agent-visual-indicator.js-*.js missing (agent detection not hidden)")
 
     set_entry(profile, 4, dst, False)
     print(f"{profile}\n  - installed: {dst}")
